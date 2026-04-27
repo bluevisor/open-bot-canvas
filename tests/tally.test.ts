@@ -11,6 +11,9 @@ function pr(overrides: Partial<PullRequestInfo> & { number: number }): PullReque
     author: 'octocat',
     url: `https://github.com/x/y/pull/${overrides.number}`,
     draft: false,
+    labels: [],
+    mergeable: true,
+    mergeableState: 'clean',
     ...overrides,
   };
 }

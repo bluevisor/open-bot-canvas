@@ -29,6 +29,13 @@ async function main(): Promise<void> {
 
   const issueNumber = await client.findOrCreateTallyIssue();
   await client.commentOnIssue(issueNumber, markdown);
+
+  if (result.winner) {
+    await client.setCandidateLabel(result.winner.pr.number, prs);
+  } else {
+    await client.clearCandidateLabel(prs);
+  }
+
   process.stdout.write(`Posted tally to issue #${issueNumber}\n`);
 }
 

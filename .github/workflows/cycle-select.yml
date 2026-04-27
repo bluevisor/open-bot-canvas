@@ -1,12 +1,12 @@
-name: Daily Tally
+name: Cycle Select
 
 on:
   schedule:
-    - cron: '0 0 * * *'
+    - cron: '0 4 * * *'
   workflow_dispatch:
     inputs:
       dry_run:
-        description: 'Print result to logs without commenting'
+        description: 'Print result to logs without merging or commenting'
         required: false
         default: 'false'
 
@@ -16,11 +16,11 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: daily-tally
+  group: cycle-select
   cancel-in-progress: false
 
 jobs:
-  tally:
+  select:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -34,9 +34,9 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Run tally
+      - name: Run cycle selector
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           DRY_RUN: ${{ inputs.dry_run }}
-        run: pnpm tally
+        run: pnpm select
