@@ -29,7 +29,7 @@ export interface TallyResult {
 }
 
 export type SelectionOutcome =
-  | { kind: 'merged'; pr: PullRequestInfo; sha: string }
+  | { kind: 'ready'; pr: PullRequestInfo }
   | { kind: 'vetoed'; pr: PullRequestInfo; reason: string }
   | { kind: 'deferred'; pr: PullRequestInfo; reason: string }
   | { kind: 'none'; reason: string };

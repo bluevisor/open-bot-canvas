@@ -11,7 +11,7 @@ on:
         default: 'false'
 
 permissions:
-  contents: write
+  contents: read
   issues: write
   pull-requests: write
 

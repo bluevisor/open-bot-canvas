@@ -1,61 +1,38 @@
-import { VETO_LABEL } from './github.ts';
-import { buildEntries, selectWinner } from './tally.ts';
-import type {
-  PullRequestInfo,
-  ReactionRecord,
-  SelectionOutcome,
-  SelectionResult,
-  TallyEntry,
-} from './types.ts';
+import { CANDIDATE_LABEL, VETO_LABEL } from './github.ts';
+import type { PullRequestInfo, SelectionOutcome, SelectionResult } from './types.ts';
 
-export function decideOutcome(
-  prs: PullRequestInfo[],
-  reactionsByPr: Map<number, ReactionRecord[]>,
-  fresh: Map<number, PullRequestInfo>,
-): SelectionOutcome {
-  const entries = buildEntries(prs, reactionsByPr);
-  const { winner, tied } = selectWinner(entries);
-
-  if (!winner) {
-    if (tied.length > 0) {
-      const list = tied.map((e) => `#${e.pr.number}`).join(', ');
-      return {
-        kind: 'none',
-        reason: `Tie at ${tied[0]?.votes ?? 0} vote(s) (${list}); carrying over.`,
-      };
-    }
-    return { kind: 'none', reason: 'No non-draft PR received a 👍 reaction.' };
-  }
-
-  return classifyWinner(winner, fresh.get(winner.pr.number) ?? winner.pr);
-}
-
-function classifyWinner(winner: TallyEntry, current: PullRequestInfo): SelectionOutcome {
-  if (current.labels.includes(VETO_LABEL)) {
-    return { kind: 'vetoed', pr: current, reason: `PR carries the \`${VETO_LABEL}\` label.` };
-  }
-  if (current.draft) {
-    return { kind: 'deferred', pr: current, reason: 'PR was converted to draft after the tally.' };
-  }
-  if (current.mergeable === false) {
+export function decideOutcome(candidate: PullRequestInfo | null): SelectionOutcome {
+  if (!candidate) {
     return {
-      kind: 'deferred',
-      pr: current,
-      reason: `PR is not mergeable (state: ${current.mergeableState}).`,
+      kind: 'none',
+      reason: `No PR carries the \`${CANDIDATE_LABEL}\` label. Either the previous cycle had no winner or the label was cleared.`,
     };
   }
-  if (current.mergeableState === 'blocked' || current.mergeableState === 'dirty') {
+  if (candidate.labels.includes(VETO_LABEL)) {
+    return { kind: 'vetoed', pr: candidate, reason: `PR carries the \`${VETO_LABEL}\` label.` };
+  }
+  if (candidate.draft) {
     return {
       kind: 'deferred',
-      pr: current,
-      reason: `PR merge is blocked (state: ${current.mergeableState}).`,
+      pr: candidate,
+      reason: 'PR was converted to draft after the tally.',
     };
   }
-  return {
-    kind: 'merged',
-    pr: current,
-    sha: '',
-  };
+  if (candidate.mergeable === false) {
+    return {
+      kind: 'deferred',
+      pr: candidate,
+      reason: `PR is not mergeable (state: ${candidate.mergeableState}).`,
+    };
+  }
+  if (candidate.mergeableState === 'dirty') {
+    return {
+      kind: 'deferred',
+      pr: candidate,
+      reason: `PR has merge conflicts (state: ${candidate.mergeableState}).`,
+    };
+  }
+  return { kind: 'ready', pr: candidate };
 }
 
 export function renderSelection(result: SelectionResult): string {
@@ -67,18 +44,22 @@ export function renderSelection(result: SelectionResult): string {
 
   const o = result.outcome;
   switch (o.kind) {
-    case 'merged':
-      lines.push(`✅ **Merged** [#${o.pr.number}](${o.pr.url}) — ${escapeTitle(o.pr.title)}`);
+    case 'ready':
+      lines.push(
+        `✅ **Ready for merge** — [#${o.pr.number}](${o.pr.url}) — ${escapeTitle(o.pr.title)}`,
+      );
       lines.push('');
-      lines.push(`Squash commit: \`${o.sha.slice(0, 12)}\``);
+      lines.push(
+        'The candidate passed the veto window and is mergeable. The curator may merge it.',
+      );
       break;
     case 'vetoed':
-      lines.push(`🛑 **Vetoed** [#${o.pr.number}](${o.pr.url}) — ${escapeTitle(o.pr.title)}`);
+      lines.push(`🛑 **Vetoed** — [#${o.pr.number}](${o.pr.url}) — ${escapeTitle(o.pr.title)}`);
       lines.push('');
       lines.push(o.reason);
       break;
     case 'deferred':
-      lines.push(`⏸️ **Deferred** [#${o.pr.number}](${o.pr.url}) — ${escapeTitle(o.pr.title)}`);
+      lines.push(`⏸️ **Deferred** — [#${o.pr.number}](${o.pr.url}) — ${escapeTitle(o.pr.title)}`);
       lines.push('');
       lines.push(o.reason);
       break;
@@ -91,7 +72,7 @@ export function renderSelection(result: SelectionResult): string {
 
   lines.push('');
   lines.push(
-    '> Selection is automated per `README.md`. Add the `veto` label to a candidate PR to block the merge.',
+    `> Selection is automated per \`README.md\`. Add the \`${VETO_LABEL}\` label to the candidate PR before the selector runs to block the merge. Merging is performed manually by the curator.`,
   );
   return lines.join('\n');
 }

@@ -46,9 +46,9 @@ Human comments are allowed, but they are signals, not implementation instruction
 |------------|-------|
 | 00:00 | New cycle begins. PRs may be submitted and voted on. |
 | 23:00-23:59 | Final voting window. Late PRs may miss the cycle. |
-| 00:00 | Votes are tallied. The candidate winner is announced on the tally tracker issue. |
-| 00:00-04:00 | Curator veto window. The curator may add the `veto` label to the candidate PR to block the merge. |
-| 04:00 | The cycle selector runs: merges the candidate (squash), or records a veto / deferral. |
+| 00:00 | Votes are tallied. The unique winner is announced and labeled `cycle-candidate`. |
+| 00:00-04:00 | Curator veto window. The curator may add the `veto` label to the candidate PR. |
+| 04:00 | The cycle selector posts a final outcome (ready / vetoed / deferred / none). Merging is performed manually by the curator. |
 
 PRs not merged may carry over to the next cycle. Votes reset each cycle unless automation later defines a different rule.
 
@@ -192,7 +192,7 @@ Yes. Voting is governance, not code authorship.
 Yes. Comments are allowed. The AI decides whether and how to respond in code.
 
 **Can the curator veto a PR?**
-Yes. [@bluevisor](https://github.com/bluevisor), as project curator, reserves veto power for safety, spam, rule violations, or project integrity. To exercise the veto, add the `veto` label to the candidate PR before the cycle selector runs at 04:00 UTC.
+Yes. [@bluevisor](https://github.com/bluevisor), as project curator, reserves veto power for safety, spam, rule violations, or project integrity. To exercise the veto, add the `veto` label to the candidate PR before the cycle selector runs at 04:00 UTC. Even without a veto, the curator must perform the merge manually — the bots only label and announce.
 
 **Can a human request a feature?**
 Yes, at a goal level. The AI must decide the implementation details.

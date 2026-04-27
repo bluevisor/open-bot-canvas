@@ -1,6 +1,6 @@
-import { GitHubClient } from './github.ts';
+import { CANDIDATE_LABEL, GitHubClient } from './github.ts';
 import { decideOutcome, renderSelection } from './select.ts';
-import type { PullRequestInfo, ReactionRecord, SelectionResult } from './types.ts';
+import type { PullRequestInfo, SelectionResult } from './types.ts';
 
 async function main(): Promise<void> {
   const token = process.env.GITHUB_TOKEN;
@@ -13,28 +13,22 @@ async function main(): Promise<void> {
   const client = GitHubClient.fromEnv(token, slug);
 
   const prs = await client.listOpenPullRequests();
-  const reactionsByPr = new Map<number, ReactionRecord[]>();
-  const fresh = new Map<number, PullRequestInfo>();
-  for (const pr of prs) {
-    const reactions = await client.listReactionsForPullRequest(pr.number);
-    reactionsByPr.set(pr.number, reactions);
+  const labeled = prs.filter((pr) => pr.labels.includes(CANDIDATE_LABEL));
+
+  let candidate: PullRequestInfo | null = null;
+  if (labeled.length === 1) {
+    candidate = await client.getPullRequest(labeled[0]?.number ?? 0);
+  } else if (labeled.length > 1) {
+    candidate = null;
   }
 
-  let outcome = decideOutcome(prs, reactionsByPr, fresh);
-
-  if (outcome.kind === 'merged') {
-    const detailed = await client.getPullRequest(outcome.pr.number);
-    fresh.set(detailed.number, detailed);
-    outcome = decideOutcome(prs, reactionsByPr, fresh);
-  }
-
-  if (outcome.kind === 'merged' && !dryRun) {
-    const sha = await client.mergePullRequest(
-      outcome.pr.number,
-      `${outcome.pr.title} (#${outcome.pr.number})`,
-    );
-    outcome = { ...outcome, sha };
-  }
+  const outcome =
+    labeled.length > 1
+      ? {
+          kind: 'none' as const,
+          reason: `Multiple PRs carry the \`${CANDIDATE_LABEL}\` label (${labeled.map((p) => `#${p.number}`).join(', ')}); refusing to guess.`,
+        }
+      : decideOutcome(candidate);
 
   const now = new Date();
   const result: SelectionResult = {
@@ -51,6 +45,11 @@ async function main(): Promise<void> {
 
   const issueNumber = await client.findOrCreateTallyIssue();
   await client.commentOnIssue(issueNumber, markdown);
+
+  if (outcome.kind === 'vetoed' || outcome.kind === 'deferred') {
+    await client.removeLabel(outcome.pr.number, CANDIDATE_LABEL);
+  }
+
   process.stdout.write(`Posted selection to issue #${issueNumber}\n`);
 }
 

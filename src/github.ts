@@ -9,6 +9,7 @@ export interface RepoRef {
 export const TALLY_ISSUE_LABEL = 'daily-tally';
 export const TALLY_ISSUE_TITLE = 'Daily Tally Tracker';
 export const VETO_LABEL = 'veto';
+export const CANDIDATE_LABEL = 'cycle-candidate';
 export const CURATOR_LOGIN = 'bluevisor';
 
 export function parseRepo(slug: string): RepoRef {
@@ -62,14 +63,58 @@ export class GitHubClient {
     };
   }
 
-  async mergePullRequest(prNumber: number, commitTitle: string): Promise<string> {
-    const { data } = await this.octokit.pulls.merge({
-      ...this.ref,
-      pull_number: prNumber,
-      merge_method: 'squash',
-      commit_title: commitTitle,
-    });
-    return data.sha;
+  async setCandidateLabel(prNumber: number, openPrs: PullRequestInfo[]): Promise<void> {
+    await this.ensureCandidateLabelExists();
+    for (const pr of openPrs) {
+      if (pr.number !== prNumber && pr.labels.includes(CANDIDATE_LABEL)) {
+        await this.removeLabel(pr.number, CANDIDATE_LABEL);
+      }
+    }
+    const target = openPrs.find((pr) => pr.number === prNumber);
+    if (target && !target.labels.includes(CANDIDATE_LABEL)) {
+      await this.octokit.issues.addLabels({
+        ...this.ref,
+        issue_number: prNumber,
+        labels: [CANDIDATE_LABEL],
+      });
+    }
+  }
+
+  async clearCandidateLabel(openPrs: PullRequestInfo[]): Promise<void> {
+    for (const pr of openPrs) {
+      if (pr.labels.includes(CANDIDATE_LABEL)) {
+        await this.removeLabel(pr.number, CANDIDATE_LABEL);
+      }
+    }
+  }
+
+  async removeLabel(prNumber: number, label: string): Promise<void> {
+    try {
+      await this.octokit.issues.removeLabel({
+        ...this.ref,
+        issue_number: prNumber,
+        name: label,
+      });
+    } catch (err) {
+      if (!isNotFound(err)) throw err;
+    }
+  }
+
+  private async ensureCandidateLabelExists(): Promise<void> {
+    try {
+      await this.octokit.issues.getLabel({ ...this.ref, name: CANDIDATE_LABEL });
+    } catch (err) {
+      if (isNotFound(err)) {
+        await this.octokit.issues.createLabel({
+          ...this.ref,
+          name: CANDIDATE_LABEL,
+          color: '0e8a16',
+          description: 'Tallied winner for the current cycle, awaiting curator merge',
+        });
+        return;
+      }
+      throw err;
+    }
   }
 
   async listReactionsForPullRequest(prNumber: number): Promise<ReactionRecord[]> {
