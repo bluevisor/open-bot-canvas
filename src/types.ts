@@ -4,6 +4,9 @@ export interface PullRequestInfo {
   author: string;
   url: string;
   draft: boolean;
+  labels: string[];
+  mergeable: boolean | null;
+  mergeableState: string;
 }
 
 export interface ReactionRecord {
@@ -23,4 +26,16 @@ export interface TallyResult {
   entries: TallyEntry[];
   winner: TallyEntry | null;
   tied: TallyEntry[];
+}
+
+export type SelectionOutcome =
+  | { kind: 'merged'; pr: PullRequestInfo; sha: string }
+  | { kind: 'vetoed'; pr: PullRequestInfo; reason: string }
+  | { kind: 'deferred'; pr: PullRequestInfo; reason: string }
+  | { kind: 'none'; reason: string };
+
+export interface SelectionResult {
+  cycleDate: string;
+  generatedAt: string;
+  outcome: SelectionOutcome;
 }

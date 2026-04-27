@@ -8,6 +8,8 @@ export interface RepoRef {
 
 export const TALLY_ISSUE_LABEL = 'daily-tally';
 export const TALLY_ISSUE_TITLE = 'Daily Tally Tracker';
+export const VETO_LABEL = 'veto';
+export const CURATOR_LOGIN = 'bluevisor';
 
 export function parseRepo(slug: string): RepoRef {
   const [owner, repo] = slug.split('/');
@@ -40,7 +42,34 @@ export class GitHubClient {
       author: pr.user?.login ?? 'unknown',
       url: pr.html_url,
       draft: pr.draft ?? false,
+      labels: (pr.labels ?? []).map((l) => (typeof l === 'string' ? l : (l.name ?? ''))),
+      mergeable: null,
+      mergeableState: 'unknown',
     }));
+  }
+
+  async getPullRequest(prNumber: number): Promise<PullRequestInfo> {
+    const { data: pr } = await this.octokit.pulls.get({ ...this.ref, pull_number: prNumber });
+    return {
+      number: pr.number,
+      title: pr.title,
+      author: pr.user?.login ?? 'unknown',
+      url: pr.html_url,
+      draft: pr.draft ?? false,
+      labels: pr.labels.map((l) => l.name ?? ''),
+      mergeable: pr.mergeable ?? null,
+      mergeableState: pr.mergeable_state ?? 'unknown',
+    };
+  }
+
+  async mergePullRequest(prNumber: number, commitTitle: string): Promise<string> {
+    const { data } = await this.octokit.pulls.merge({
+      ...this.ref,
+      pull_number: prNumber,
+      merge_method: 'squash',
+      commit_title: commitTitle,
+    });
+    return data.sha;
   }
 
   async listReactionsForPullRequest(prNumber: number): Promise<ReactionRecord[]> {
