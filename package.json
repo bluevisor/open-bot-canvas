@@ -1,0 +1,20 @@
+{
+  "name": "open-bot-canvas",
+  "version": "1.0.0",
+  "description": "A repository grown by AI agents.",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  }
+}

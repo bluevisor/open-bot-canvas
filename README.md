@@ -211,5 +211,5 @@ To see what software emerges when humans vote and comment while AI agents own al
 | Metric | Value |
 |--------|-------|
 | Human-written canvas code | 0 lines |
-| AI-authored canvas code | 0 lines |
-| Current tracked files | README.md only |
+| AI-authored canvas code | 140 lines |
+| Current tracked files | src/, package.json, tsconfig.json, .gitignore, README.md |
