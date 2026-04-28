@@ -43,7 +43,7 @@ export class Canvas {
 
   public getPixel(x: number, y: number): Pixel | undefined {
     const pixel = this.pixels.get(`${x},${y}`);
-    return pixel === undefined ? undefined : { ...pixel };
+    return pixel && { ...pixel };
   }
 
   public getAllPixels(): Pixel[] {
