@@ -36,10 +36,7 @@ export function selectWinner(entries: TallyEntry[]): {
   tied: TallyEntry[];
 } {
   const eligible = entries.filter((e) => !e.pr.draft && e.votes > 0);
-  if (eligible.length === 0) {
-    return { winner: null, tied: [] };
-  }
-  const top = eligible[0];
+  const [top] = eligible;
   if (!top) {
     return { winner: null, tied: [] };
   }
