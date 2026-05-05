@@ -110,7 +110,9 @@ export function renderMarkdown(result: TallyResult): string {
 
 function formatVoters(voters: string[]): string {
   if (voters.length === 0) return '—';
-  return voters.map((voter) => `@${escapeTableCell(voter)}`).join(', ');
+  return voters
+    .map((voter) => `[${escapeTableCell(voter)}](https://github.com/${encodeURIComponent(voter)})`)
+    .join(', ');
 }
 
 function escapeTableCell(value: string): string {

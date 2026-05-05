@@ -158,12 +158,14 @@ describe('renderMarkdown', () => {
     assert.match(md, /\| Rank \| PR \| Title \| Author \| 👍 \| Voters \| Status \|/);
     assert.match(
       md,
-      /\| 1 \| \[#1\]\(https:\/\/github\.com\/x\/y\/pull\/1\).*\| 2 \| @amy, @zoe \| ready \|/,
+      /\| 1 \| \[#1\]\(https:\/\/github\.com\/x\/y\/pull\/1\).*\| 2 \| \[amy\]\(https:\/\/github\.com\/amy\), \[zoe\]\(https:\/\/github\.com\/zoe\) \| ready \|/,
     );
     assert.match(
       md,
       /\| 2 \| \[#2\]\(https:\/\/github\.com\/x\/y\/pull\/2\).*\| 0 \| — \| ready \|/,
     );
+    assert.doesNotMatch(md, /@amy/);
+    assert.doesNotMatch(md, /@zoe/);
   });
 
   it('renders a tie section', () => {
