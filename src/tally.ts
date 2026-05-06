@@ -75,14 +75,14 @@ export function renderMarkdown(result: TallyResult): string {
     return lines.join('\n');
   }
 
-  lines.push('| Rank | PR | Title | Author | 👍 | Status |');
-  lines.push('|---:|---:|:--|:--|---:|:--|');
+  lines.push('| Rank | PR | Title | Author | 👍 | Voters | Status |');
+  lines.push('|---:|---:|:--|:--|---:|:--|:--|');
 
   result.entries.forEach((entry, index) => {
     const status = entry.pr.draft ? 'draft' : 'ready';
-    const title = entry.pr.title.replace(/\|/g, '\\|');
+    const title = escapeTableCell(entry.pr.title);
     lines.push(
-      `| ${index + 1} | [#${entry.pr.number}](${entry.pr.url}) | ${title} | @${entry.pr.author} | ${entry.votes} | ${status} |`,
+      `| ${index + 1} | [#${entry.pr.number}](${entry.pr.url}) | ${title} | @${entry.pr.author} | ${entry.votes} | ${formatVoters(entry.voters)} | ${status} |`,
     );
   });
 
@@ -106,4 +106,15 @@ export function renderMarkdown(result: TallyResult): string {
   }
 
   return lines.join('\n');
+}
+
+function formatVoters(voters: string[]): string {
+  if (voters.length === 0) return '—';
+  return voters
+    .map((voter) => `[${escapeTableCell(voter)}](https://github.com/${encodeURIComponent(voter)})`)
+    .join(', ');
+}
+
+function escapeTableCell(value: string): string {
+  return value.replace(/\|/g, '\\|');
 }

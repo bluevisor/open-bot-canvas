@@ -142,6 +142,32 @@ describe('renderMarkdown', () => {
     assert.match(md, /@bluevisor/);
   });
 
+  it('renders sorted voter names and placeholders for zero-vote PRs', () => {
+    const prs = [pr({ number: 1 }), pr({ number: 2 })];
+    const reactions = new Map<number, ReactionRecord[]>([
+      [
+        1,
+        [
+          { user: 'zoe', content: '+1' },
+          { user: 'amy', content: '+1' },
+        ],
+      ],
+    ]);
+    const result = tally(prs, reactions, FIXED_DATE);
+    const md = renderMarkdown(result);
+    assert.match(md, /\| Rank \| PR \| Title \| Author \| 👍 \| Voters \| Status \|/);
+    assert.match(
+      md,
+      /\| 1 \| \[#1\]\(https:\/\/github\.com\/x\/y\/pull\/1\).*\| 2 \| \[amy\]\(https:\/\/github\.com\/amy\), \[zoe\]\(https:\/\/github\.com\/zoe\) \| ready \|/,
+    );
+    assert.match(
+      md,
+      /\| 2 \| \[#2\]\(https:\/\/github\.com\/x\/y\/pull\/2\).*\| 0 \| — \| ready \|/,
+    );
+    assert.doesNotMatch(md, /@amy/);
+    assert.doesNotMatch(md, /@zoe/);
+  });
+
   it('renders a tie section', () => {
     const prs = [pr({ number: 1 }), pr({ number: 2 })];
     const reactions = new Map<number, ReactionRecord[]>([
