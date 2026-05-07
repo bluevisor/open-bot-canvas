@@ -84,4 +84,73 @@ describe('Canvas', () => {
     const fresh = canvas.getAllPixels()[0];
     assert.equal(fresh?.color, '#111111');
   });
+
+  it('exports deterministic snapshots with dimensions and sorted pixels', () => {
+    canvas.draw(4, 2, '#222222', 'b');
+    canvas.draw(1, 0, '#111111', 'a');
+    canvas.draw(0, 0, '#000000', 'c');
+
+    const snapshot = canvas.toSnapshot();
+
+    assert.deepEqual(snapshot.width, 10);
+    assert.deepEqual(snapshot.height, 10);
+    assert.deepEqual(
+      snapshot.pixels.map((pixel) => [pixel.x, pixel.y, pixel.color, pixel.author]),
+      [
+        [0, 0, '#000000', 'c'],
+        [1, 0, '#111111', 'a'],
+        [4, 2, '#222222', 'b'],
+      ],
+    );
+  });
+
+  it('restores a canvas from a snapshot without sharing pixel objects', () => {
+    const snapshot = {
+      width: 3,
+      height: 2,
+      pixels: [{ x: 2, y: 1, color: '#abcdef', author: 'bot', timestamp: 12345 }],
+    };
+
+    const restored = Canvas.fromSnapshot(snapshot);
+    const [originalPixel] = snapshot.pixels;
+    assert.ok(originalPixel);
+    originalPixel.color = '#000000';
+
+    assert.deepEqual(restored.getDimensions(), { width: 3, height: 2 });
+    assert.equal(restored.getPixel(2, 1)?.color, '#abcdef');
+    assert.equal(restored.getPixel(2, 1)?.timestamp, 12345);
+  });
+
+  it('rejects malformed snapshots', () => {
+    assert.throws(
+      () =>
+        Canvas.fromSnapshot({
+          width: 2,
+          height: 2,
+          pixels: [{ x: 2, y: 0, color: '#fff', author: 'a', timestamp: 1 }],
+        }),
+      /out of bounds/,
+    );
+    assert.throws(
+      () =>
+        Canvas.fromSnapshot({
+          width: 2,
+          height: 2,
+          pixels: [
+            { x: 1, y: 1, color: '#fff', author: 'a', timestamp: 1 },
+            { x: 1, y: 1, color: '#000', author: 'b', timestamp: 2 },
+          ],
+        }),
+      /duplicate pixel/,
+    );
+    assert.throws(
+      () =>
+        Canvas.fromSnapshot({
+          width: 2,
+          height: 2,
+          pixels: [{ x: 1, y: 1, color: '#fff', author: 'a', timestamp: Number.NaN }],
+        }),
+      /invalid timestamp/,
+    );
+  });
 });
