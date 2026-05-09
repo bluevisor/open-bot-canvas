@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { describe, it } from 'node:test';
 import type { CanvasSnapshot, Pixel } from '../src/Canvas.ts';
-import { applyPatch, diffSnapshots } from '../src/diff.ts';
+import { applyPatch, diffSnapshots, invertPatch } from '../src/diff.ts';
 
 function pixel(overrides: Partial<Pixel> & Pick<Pixel, 'x' | 'y'>): Pixel {
   return {
@@ -129,5 +129,56 @@ describe('applyPatch', () => {
     });
 
     assert.deepEqual(after.pixels, []);
+  });
+});
+
+describe('invertPatch', () => {
+  it('reverses a patch so an applied diff can be undone', () => {
+    const before = snapshot([
+      pixel({ x: 0, y: 0, color: '#000000', author: 'first', timestamp: 1 }),
+      pixel({ x: 3, y: 2, color: '#333333', author: 'gone', timestamp: 2 }),
+    ]);
+    const after = snapshot([
+      pixel({ x: 0, y: 0, color: '#ffffff', author: 'second', timestamp: 3 }),
+      pixel({ x: 1, y: 1, color: '#111111', author: 'added', timestamp: 4 }),
+    ]);
+
+    const patch = diffSnapshots(before, after);
+    const restored = applyPatch(after, invertPatch(patch));
+
+    assert.deepEqual(restored, before);
+  });
+
+  it('does not share pixel objects with the original patch', () => {
+    const original = diffSnapshots(
+      snapshot([pixel({ x: 0, y: 0, color: '#000000' })]),
+      snapshot([pixel({ x: 0, y: 0, color: '#ffffff' })]),
+    );
+
+    const inverted = invertPatch(original);
+    const invertedAfter = inverted.changes[0]?.after;
+    assert.ok(invertedAfter);
+    invertedAfter.color = '#123456';
+
+    assert.equal(original.changes[0]?.before?.color, '#000000');
+  });
+
+  it('preserves dimensions and reverses change order for safe replay', () => {
+    const patch = diffSnapshots(
+      snapshot([pixel({ x: 0, y: 0 }), pixel({ x: 1, y: 0 })]),
+      snapshot([]),
+    );
+
+    const inverted = invertPatch(patch);
+
+    assert.equal(inverted.width, 4);
+    assert.equal(inverted.height, 3);
+    assert.deepEqual(
+      inverted.changes.map((change) => [change.x, change.y]),
+      [
+        [1, 0],
+        [0, 0],
+      ],
+    );
   });
 });
