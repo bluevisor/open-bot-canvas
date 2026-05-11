@@ -1,3 +1,5 @@
+import { normalizeHexColor } from './color.ts';
+
 export interface Pixel {
   x: number;
   y: number;
@@ -34,9 +36,7 @@ export class Canvas {
 
     for (const pixel of snapshot.pixels) {
       canvas.assertCoordinates(pixel.x, pixel.y);
-      if (typeof pixel.color !== 'string') {
-        throw new Error(`Pixel at (${pixel.x}, ${pixel.y}) has a non-string color`);
-      }
+      const color = normalizeHexColor(pixel.color);
       if (typeof pixel.author !== 'string') {
         throw new Error(`Pixel at (${pixel.x}, ${pixel.y}) has a non-string author`);
       }
@@ -49,7 +49,7 @@ export class Canvas {
         throw new Error(`Canvas snapshot contains duplicate pixel at (${pixel.x}, ${pixel.y})`);
       }
       seen.add(key);
-      canvas.pixels.set(key, { ...pixel });
+      canvas.pixels.set(key, { ...pixel, color });
     }
 
     return canvas;
@@ -57,11 +57,12 @@ export class Canvas {
 
   public draw(x: number, y: number, color: string, author: string): void {
     this.assertCoordinates(x, y);
+    const normalizedColor = normalizeHexColor(color);
 
     this.pixels.set(keyFor(x, y), {
       x,
       y,
-      color,
+      color: normalizedColor,
       author,
       timestamp: Date.now(),
     });

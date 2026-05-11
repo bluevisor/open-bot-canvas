@@ -22,12 +22,18 @@ describe('Canvas', () => {
     assert.throws(() => new Canvas(Number.NaN, 10), /positive integer/);
   });
 
-  it('draws a pixel at integer coordinates', () => {
+  it('draws a pixel at integer coordinates and normalizes hex color case', () => {
     canvas.draw(1, 1, '#FF0000', 'bot-1');
     const pixel = canvas.getPixel(1, 1);
     assert.ok(pixel);
-    assert.equal(pixel.color, '#FF0000');
+    assert.equal(pixel.color, '#ff0000');
     assert.equal(pixel.author, 'bot-1');
+  });
+
+  it('rejects colors that are not six-digit hex values', () => {
+    assert.throws(() => canvas.draw(1, 1, 'red', 'bot-1'), /expected #RRGGBB/);
+    assert.throws(() => canvas.draw(1, 1, '#fff', 'bot-1'), /expected #RRGGBB/);
+    assert.throws(() => canvas.draw(1, 1, '#12345g', 'bot-1'), /expected #RRGGBB/);
   });
 
   it('throws when drawing out of bounds', () => {
@@ -48,7 +54,7 @@ describe('Canvas', () => {
     canvas.draw(5, 5, '#000000', 'bot-1');
     canvas.draw(5, 5, '#FFFFFF', 'bot-2');
     const pixel = canvas.getPixel(5, 5);
-    assert.equal(pixel?.color, '#FFFFFF');
+    assert.equal(pixel?.color, '#ffffff');
     assert.equal(pixel?.author, 'bot-2');
   });
 
@@ -121,13 +127,23 @@ describe('Canvas', () => {
     assert.equal(restored.getPixel(2, 1)?.timestamp, 12345);
   });
 
+  it('normalizes snapshot colors while restoring', () => {
+    const restored = Canvas.fromSnapshot({
+      width: 2,
+      height: 2,
+      pixels: [{ x: 0, y: 0, color: '#ABCDEF', author: 'bot', timestamp: 1 }],
+    });
+
+    assert.equal(restored.getPixel(0, 0)?.color, '#abcdef');
+  });
+
   it('rejects malformed snapshots', () => {
     assert.throws(
       () =>
         Canvas.fromSnapshot({
           width: 2,
           height: 2,
-          pixels: [{ x: 2, y: 0, color: '#fff', author: 'a', timestamp: 1 }],
+          pixels: [{ x: 2, y: 0, color: '#ffffff', author: 'a', timestamp: 1 }],
         }),
       /out of bounds/,
     );
@@ -137,8 +153,8 @@ describe('Canvas', () => {
           width: 2,
           height: 2,
           pixels: [
-            { x: 1, y: 1, color: '#fff', author: 'a', timestamp: 1 },
-            { x: 1, y: 1, color: '#000', author: 'b', timestamp: 2 },
+            { x: 1, y: 1, color: '#ffffff', author: 'a', timestamp: 1 },
+            { x: 1, y: 1, color: '#000000', author: 'b', timestamp: 2 },
           ],
         }),
       /duplicate pixel/,
@@ -149,6 +165,15 @@ describe('Canvas', () => {
           width: 2,
           height: 2,
           pixels: [{ x: 1, y: 1, color: '#fff', author: 'a', timestamp: Number.NaN }],
+        }),
+      /expected #RRGGBB/,
+    );
+    assert.throws(
+      () =>
+        Canvas.fromSnapshot({
+          width: 2,
+          height: 2,
+          pixels: [{ x: 1, y: 1, color: '#ffffff', author: 'a', timestamp: Number.NaN }],
         }),
       /invalid timestamp/,
     );
