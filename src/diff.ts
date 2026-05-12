@@ -49,7 +49,7 @@ export function applyPatch(snapshot: CanvasSnapshot, patch: CanvasPatch): Canvas
 
   const pixels = indexPixels(snapshot);
   for (const change of patch.changes) {
-    assertInBounds(change.x, change.y, patch.width, patch.height);
+    assertValidChange(change, patch.width, patch.height);
     const key = keyFor(change.x, change.y);
 
     if (change.before) {
@@ -77,6 +77,36 @@ function assertSameDimensions(before: CanvasSnapshot, after: CanvasSnapshot): vo
   if (before.width !== after.width || before.height !== after.height) {
     throw new Error(
       `Cannot diff snapshots with different dimensions: ${before.width}x${before.height} vs ${after.width}x${after.height}`,
+    );
+  }
+}
+
+function assertValidChange(change: PixelChange, width: number, height: number): void {
+  assertInBounds(change.x, change.y, width, height);
+
+  if (!change.before && !change.after) {
+    throw new Error(`Patch change at (${change.x}, ${change.y}) must include before or after`);
+  }
+
+  if (change.before) {
+    assertEndpointMatchesChange(change, change.before, 'before');
+    assertInBounds(change.before.x, change.before.y, width, height);
+  }
+
+  if (change.after) {
+    assertEndpointMatchesChange(change, change.after, 'after');
+    assertInBounds(change.after.x, change.after.y, width, height);
+  }
+}
+
+function assertEndpointMatchesChange(
+  change: PixelChange,
+  pixel: Pixel,
+  label: 'before' | 'after',
+): void {
+  if (pixel.x !== change.x || pixel.y !== change.y) {
+    throw new Error(
+      `Patch change at (${change.x}, ${change.y}) has ${label} pixel for (${pixel.x}, ${pixel.y})`,
     );
   }
 }
