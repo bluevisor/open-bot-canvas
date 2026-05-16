@@ -32,7 +32,7 @@ describe('snapshotToJson', () => {
         snapshotToJson({
           width: 1,
           height: 1,
-          pixels: [{ x: 2, y: 0, color: '#fff', author: 'bot', timestamp: 1 }],
+          pixels: [{ x: 2, y: 0, color: '#ffffff', author: 'bot', timestamp: 1 }],
         }),
       /out of bounds/,
     );
@@ -92,8 +92,8 @@ describe('snapshotFromJson', () => {
             width: 2,
             height: 2,
             pixels: [
-              { x: 1, y: 1, color: '#fff', author: 'a', timestamp: 1 },
-              { x: 1, y: 1, color: '#000', author: 'b', timestamp: 2 },
+              { x: 1, y: 1, color: '#ffffff', author: 'a', timestamp: 1 },
+              { x: 1, y: 1, color: '#000000', author: 'b', timestamp: 2 },
             ],
           }),
         ),
