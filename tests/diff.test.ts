@@ -130,6 +130,35 @@ describe('applyPatch', () => {
 
     assert.deepEqual(after.pixels, []);
   });
+
+  it('rejects patch changes without a before or after pixel', () => {
+    assert.throws(
+      () => applyPatch(snapshot(), { width: 4, height: 3, changes: [{ x: 1, y: 1 }] }),
+      /must include before or after/,
+    );
+  });
+
+  it('rejects patch endpoints whose coordinates differ from the change coordinates', () => {
+    assert.throws(
+      () =>
+        applyPatch(snapshot(), {
+          width: 4,
+          height: 3,
+          changes: [{ x: 1, y: 1, after: pixel({ x: 2, y: 1 }) }],
+        }),
+      /has after pixel for \(2, 1\)/,
+    );
+
+    assert.throws(
+      () =>
+        applyPatch(snapshot([pixel({ x: 1, y: 1 })]), {
+          width: 4,
+          height: 3,
+          changes: [{ x: 1, y: 1, before: pixel({ x: 1, y: 2 }) }],
+        }),
+      /has before pixel for \(1, 2\)/,
+    );
+  });
 });
 
 describe('invertPatch', () => {
