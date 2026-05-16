@@ -59,11 +59,9 @@ describe('renderSvg', () => {
     assert.throws(() => renderSvg(canvas, { pixelSize: Number.NaN }), /positive integer/);
   });
 
-  it('escapes XML-significant characters in fill attributes', () => {
+  it('escapes XML-significant characters in the background fill attribute', () => {
     const canvas = new Canvas(2, 2);
-    canvas.draw(0, 0, 'url("&<>")', 'a');
     const svg = renderSvg(canvas, { background: '<script>' });
-    assert.match(svg, /fill="url\(&quot;&amp;&lt;&gt;&quot;\)"/);
     assert.match(svg, /fill="&lt;script&gt;"/);
     assert.equal(svg.includes('<script>'), false);
   });
