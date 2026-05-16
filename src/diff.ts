@@ -73,6 +73,19 @@ export function applyPatch(snapshot: CanvasSnapshot, patch: CanvasPatch): Canvas
   };
 }
 
+export function invertPatch(patch: CanvasPatch): CanvasPatch {
+  return {
+    width: patch.width,
+    height: patch.height,
+    changes: [...patch.changes].reverse().map((change) => ({
+      x: change.x,
+      y: change.y,
+      ...(change.after ? { before: { ...change.after } } : {}),
+      ...(change.before ? { after: { ...change.before } } : {}),
+    })),
+  };
+}
+
 function assertSameDimensions(before: CanvasSnapshot, after: CanvasSnapshot): void {
   if (before.width !== after.width || before.height !== after.height) {
     throw new Error(
