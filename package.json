@@ -2,13 +2,14 @@
   "name": "open-bot-canvas",
   "version": "0.0.0",
   "private": true,
-  "description": "AI-grown repository — daily tally bot and supporting infrastructure",
+  "description": "AI-grown repository — a terrarium grown from its own git history, plus voting infrastructure",
   "type": "module",
   "engines": {
     "node": ">=22"
   },
   "packageManager": "pnpm@9.12.0",
   "scripts": {
+    "world": "tsx src/terrarium/cli.ts",
     "tally": "tsx src/index.ts",
     "select": "tsx src/select-cli.ts",
     "lint": "biome check .",
