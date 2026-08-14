@@ -1,9 +1,16 @@
-// The terrarium world: a toroidal grid of plants and creatures. Every state
-// change flows through the world's own Rng, so a world built from the same
-// seeds and the same commits replays tick-for-tick identically.
+// The terrarium world: a toroidal grid of terrain, plants, and creatures.
+// Every state change flows through the world's own Rng, so a world built from
+// the same seeds and the same commits replays tick-for-tick identically.
 
 import { type Diet, type Genome, type Traits, mutate, traitsOf } from './genome.ts';
 import { type Rng, hashSeed, mulberry32, pickInt, pickOne } from './rng.ts';
+import {
+  type Terrain,
+  type TerrainOptions,
+  fertility,
+  generateTerrain,
+  isPassable,
+} from './terrain.ts';
 
 export const MAX_PLANT_GROWTH = 3;
 export const PLANT_ENERGY = 15;
@@ -43,6 +50,10 @@ export interface World {
   width: number;
   height: number;
   rng: Rng;
+  /** Ground type per cell, row-major. Fixed for the world's lifetime. */
+  terrain: Terrain[];
+  /** Cell indices plants can grow on, repeated once per point of fertility. */
+  growable: number[];
   /** Plant growth 0..MAX_PLANT_GROWTH per cell, row-major. */
   plants: number[];
   creatures: Creature[];
@@ -66,7 +77,7 @@ export interface SpawnOptions {
   label?: string;
 }
 
-export interface WorldOptions {
+export interface WorldOptions extends TerrainOptions {
   regrowthRate?: number;
 }
 
@@ -80,14 +91,24 @@ export function createWorld(
     throw new Error(`World dimensions must be positive integers, got ${width}x${height}`);
   }
   const rng = mulberry32(hashSeed(seed));
+  const terrain = generateTerrain(width, height, rng, opts);
   const plants = new Array<number>(width * height);
+  // Growth events are drawn from this pool, so rain never falls on the lake
+  // and loam — listed once per point of fertility — outgrows plain soil.
+  const growable: number[] = [];
   for (let i = 0; i < plants.length; i++) {
-    plants[i] = rng() < 0.35 ? pickInt(rng, 1, 2) : 0;
+    const soilFertility = fertility(terrain[i] ?? 'rock');
+    for (let n = 0; n < soilFertility; n++) {
+      growable.push(i);
+    }
+    plants[i] = soilFertility > 0 && rng() < 0.35 ? pickInt(rng, 1, 2) : 0;
   }
   return {
     width,
     height,
     rng,
+    terrain,
+    growable,
     plants,
     creatures: [],
     founders: [],
@@ -100,13 +121,27 @@ export function createWorld(
   };
 }
 
+/** Rejection-sample a cell this diet can stand on; falls back to a scan. */
+function randomHome(world: World, diet: Diet): { x: number; y: number } {
+  for (let attempt = 0; attempt < 32; attempt++) {
+    const x = pickInt(world.rng, 0, world.width - 1);
+    const y = pickInt(world.rng, 0, world.height - 1);
+    if (canEnter(world, x, y, diet)) return { x, y };
+  }
+  const idx = world.terrain.findIndex((cell) => isPassable(cell, diet));
+  if (idx < 0) throw new Error(`World has nowhere a ${diet} can stand`);
+  return { x: idx % world.width, y: Math.floor(idx / world.width) };
+}
+
 export function spawnCreature(world: World, genome: Genome, opts: SpawnOptions = {}): Creature {
+  const traits = traitsOf(genome);
+  const home = randomHome(world, traits.diet);
   const creature: Creature = {
     id: world.nextId++,
     genome,
-    traits: traitsOf(genome),
-    x: opts.x ?? pickInt(world.rng, 0, world.width - 1),
-    y: opts.y ?? pickInt(world.rng, 0, world.height - 1),
+    traits,
+    x: opts.x ?? home.x,
+    y: opts.y ?? home.y,
     energy: opts.energy ?? SPAWN_ENERGY,
     age: 0,
     generation: opts.generation ?? 0,
@@ -141,15 +176,44 @@ function torusDistance(world: World, x1: number, y1: number, x2: number, y2: num
   return Math.abs(torusDelta(x1, x2, world.width)) + Math.abs(torusDelta(y1, y2, world.height));
 }
 
+/** Terrain of a cell, wrapping around the torus. */
+export function terrainAt(world: World, x: number, y: number): Terrain {
+  return world.terrain[cellIndex(world, wrap(x, world.width), wrap(y, world.height))] ?? 'rock';
+}
+
+/** Can this diet stand here? Water stops everything; rock stops predators. */
+export function canEnter(world: World, x: number, y: number, diet: Diet): boolean {
+  return isPassable(terrainAt(world, x, y), diet);
+}
+
+/** Move one cell if the ground allows it; report whether the step landed. */
+function tryStep(world: World, c: Creature, dx: number, dy: number): boolean {
+  const x = wrap(c.x + dx, world.width);
+  const y = wrap(c.y + dy, world.height);
+  if (!canEnter(world, x, y, c.traits.diet)) return false;
+  c.x = x;
+  c.y = y;
+  return true;
+}
+
 function stepToward(world: World, c: Creature, tx: number, ty: number): void {
   const dx = torusDelta(c.x, tx, world.width);
   const dy = torusDelta(c.y, ty, world.height);
   // Move along the dominant axis first; ties resolve horizontally so the
-  // choice stays deterministic.
-  if (Math.abs(dx) >= Math.abs(dy) && dx !== 0) {
-    c.x = wrap(c.x + Math.sign(dx), world.width);
-  } else if (dy !== 0) {
-    c.y = wrap(c.y + Math.sign(dy), world.height);
+  // choice stays deterministic. A shoreline blocking the preferred axis
+  // pushes the creature along the other one — crude coastal pathfinding.
+  const horizontalFirst = Math.abs(dx) >= Math.abs(dy);
+  const steps: ReadonlyArray<readonly [number, number]> = horizontalFirst
+    ? [
+        [Math.sign(dx), 0],
+        [0, Math.sign(dy)],
+      ]
+    : [
+        [0, Math.sign(dy)],
+        [Math.sign(dx), 0],
+      ];
+  for (const [sx, sy] of steps) {
+    if ((sx !== 0 || sy !== 0) && tryStep(world, c, sx, sy)) return;
   }
 }
 
@@ -160,10 +224,13 @@ const DIRECTIONS = [
   [0, -1],
 ] as const;
 
+/** Step in a random direction, trying the rest in order if the way is wet. */
 function wander(world: World, c: Creature): void {
-  const [dx, dy] = pickOne(world.rng, DIRECTIONS);
-  c.x = wrap(c.x + dx, world.width);
-  c.y = wrap(c.y + dy, world.height);
+  const start = pickInt(world.rng, 0, DIRECTIONS.length - 1);
+  for (let i = 0; i < DIRECTIONS.length; i++) {
+    const [dx, dy] = DIRECTIONS[(start + i) % DIRECTIONS.length] ?? [0, 0];
+    if (tryStep(world, c, dx, dy)) return;
+  }
 }
 
 /** Nearest plant cell with any growth within the creature's sense range. */
@@ -201,18 +268,37 @@ function findNearest(world: World, self: Creature, diet: Diet, range: number): C
   return best;
 }
 
-function stepAway(world: World, c: Creature, tx: number, ty: number): void {
-  const dx = torusDelta(c.x, tx, world.width);
-  const dy = torusDelta(c.y, ty, world.height);
-  // Retreat along the threat's dominant axis; a zero delta on both axes
-  // (same cell) falls through to a random scramble.
-  if (Math.abs(dx) >= Math.abs(dy) && dx !== 0) {
-    c.x = wrap(c.x - Math.sign(dx), world.width);
-  } else if (dy !== 0) {
-    c.y = wrap(c.y - Math.sign(dy), world.height);
-  } else {
-    wander(world, c);
+/**
+ * Break for cover, or failing that for open ground away from the threat.
+ * Checking every direction — not just the threat's dominant axis — is what
+ * stops a shoreline from becoming a kill box: prey backed against water run
+ * along the shore instead of into the predator. Ground the hunter cannot
+ * climb beats raw distance, so rock outcrops work as refuges. Ties resolve in
+ * DIRECTIONS order, so the choice stays deterministic.
+ */
+function stepAway(world: World, c: Creature, threat: Creature): void {
+  const score = (x: number, y: number): number => {
+    const refuge = canEnter(world, x, y, threat.traits.diet) ? 0 : 1;
+    return refuge * 1000 + torusDistance(world, x, y, threat.x, threat.y);
+  };
+  let best: readonly [number, number] | null = null;
+  let bestScore = score(c.x, c.y);
+  for (const [dx, dy] of DIRECTIONS) {
+    const x = wrap(c.x + dx, world.width);
+    const y = wrap(c.y + dy, world.height);
+    if (!canEnter(world, x, y, c.traits.diet)) continue;
+    const candidate = score(x, y);
+    if (candidate > bestScore) {
+      best = [dx, dy];
+      bestScore = candidate;
+    }
   }
+  // Nowhere better to stand: scramble and hope the pounce misses.
+  if (!best) {
+    wander(world, c);
+    return;
+  }
+  tryStep(world, c, best[0], best[1]);
 }
 
 function eatPlant(world: World, c: Creature): boolean {
@@ -224,12 +310,17 @@ function eatPlant(world: World, c: Creature): boolean {
   return true;
 }
 
+/** Add growth to a cell; barren ground refuses it. */
+function growPlant(world: World, idx: number, amount: number): void {
+  if (fertility(world.terrain[idx] ?? 'rock') <= 0) return;
+  world.plants[idx] = Math.min(MAX_PLANT_GROWTH, (world.plants[idx] ?? 0) + amount);
+}
+
 function die(world: World, c: Creature): void {
   c.alive = false;
   world.deaths++;
-  // A corpse feeds the soil.
-  const idx = cellIndex(world, c.x, c.y);
-  world.plants[idx] = Math.min(MAX_PLANT_GROWTH, (world.plants[idx] ?? 0) + 2);
+  // A corpse feeds the soil — bare rock just bleaches it.
+  growPlant(world, cellIndex(world, c.x, c.y), 2);
 }
 
 function actHerbivore(world: World, c: Creature): void {
@@ -237,7 +328,7 @@ function actHerbivore(world: World, c: Creature): void {
     // Survival first: run from any predator in sensing distance.
     const threat = findNearest(world, c, 'predator', c.traits.senseRange);
     if (threat) {
-      stepAway(world, c, threat.x, threat.y);
+      stepAway(world, c, threat);
       continue;
     }
     if (eatPlant(world, c)) return;
@@ -283,9 +374,13 @@ function reproduce(world: World, parent: Creature): void {
   parent.energy -= childEnergy;
   const genome = world.rng() < MUTATION_CHANCE ? mutate(parent.genome, world.rng) : parent.genome;
   const [dx, dy] = pickOne(world.rng, DIRECTIONS);
+  // Offspring land beside the parent, or on top of it if that way is barred.
+  const nx = wrap(parent.x + dx, world.width);
+  const ny = wrap(parent.y + dy, world.height);
+  const reachable = canEnter(world, nx, ny, parent.traits.diet);
   spawnCreature(world, genome, {
-    x: wrap(parent.x + dx, world.width),
-    y: wrap(parent.y + dy, world.height),
+    x: reachable ? nx : parent.x,
+    y: reachable ? ny : parent.y,
     energy: childEnergy,
     generation: parent.generation + 1,
   });
@@ -296,9 +391,8 @@ export function stepWorld(world: World): void {
   world.tick++;
 
   const regrowthEvents = Math.ceil(world.plants.length * world.regrowthRate);
-  for (let i = 0; i < regrowthEvents; i++) {
-    const idx = pickInt(world.rng, 0, world.plants.length - 1);
-    world.plants[idx] = Math.min(MAX_PLANT_GROWTH, (world.plants[idx] ?? 0) + 1);
+  for (let i = 0; i < regrowthEvents && world.growable.length > 0; i++) {
+    growPlant(world, pickOne(world.rng, world.growable), 1);
   }
 
   // Iterate a snapshot in id order: creatures born this tick act next tick,
@@ -334,6 +428,7 @@ export function aliveCreatures(world: World): Creature[] {
 export function serializeWorld(world: World): string {
   return JSON.stringify({
     tick: world.tick,
+    terrain: world.terrain,
     births: world.births,
     deaths: world.deaths,
     kills: world.kills,
