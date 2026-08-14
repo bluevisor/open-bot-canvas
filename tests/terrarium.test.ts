@@ -6,6 +6,14 @@ import { parseCommitLog } from '../src/terrarium/history.ts';
 import { renderFrame } from '../src/terrarium/render.ts';
 import { hashSeed, mulberry32, pickInt } from '../src/terrarium/rng.ts';
 import {
+  ROCK_SHARE,
+  WATER_SHARE,
+  fertility,
+  generateTerrain,
+  isPassable,
+  terrainCounts,
+} from '../src/terrarium/terrain.ts';
+import {
   BREEDING_AGE,
   MAX_ENERGY,
   aliveCreatures,
@@ -13,10 +21,13 @@ import {
   serializeWorld,
   spawnCreature,
   stepWorld,
+  terrainAt,
 } from '../src/terrarium/world.ts';
 
 const SHA_A = '7067e29c1b2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f';
 const SHA_B = 'a632056f0e1d2c3b4a5968778695a4b3c2d1e0f9';
+// Third byte below 32 decodes to a predator; see traitsOf.
+const PREDATOR_SHA = '1122003344556677889900aabbccddee';
 
 describe('rng', () => {
   it('produces identical sequences for identical seeds', () => {
@@ -86,6 +97,60 @@ describe('genome', () => {
   });
 });
 
+describe('terrain', () => {
+  it('lays down the same map for the same seed and a different one otherwise', () => {
+    const a = generateTerrain(48, 20, mulberry32(hashSeed('shoreline')));
+    const b = generateTerrain(48, 20, mulberry32(hashSeed('shoreline')));
+    const c = generateTerrain(48, 20, mulberry32(hashSeed('other-shoreline')));
+    assert.deepEqual(a, b);
+    assert.notDeepEqual(a, c);
+  });
+
+  it('holds water and rock near their target shares whatever the seed', () => {
+    for (const seed of ['one', 'two', 'three', 'four']) {
+      const terrain = generateTerrain(64, 24, mulberry32(hashSeed(seed)));
+      const counts = terrainCounts(terrain);
+      const total = terrain.length;
+      assert.ok(Math.abs(counts.water / total - WATER_SHARE) < 0.03, `water for ${seed}`);
+      assert.ok(Math.abs(counts.rock / total - ROCK_SHARE) < 0.03, `rock for ${seed}`);
+      assert.ok(counts.loam > 0 && counts.soil > 0, `land for ${seed}`);
+    }
+  });
+
+  it('honours shares set to zero', () => {
+    const counts = terrainCounts(
+      generateTerrain(40, 20, mulberry32(1), { waterShare: 0, rockShare: 0 }),
+    );
+    assert.equal(counts.water, 0);
+    assert.equal(counts.rock, 0);
+  });
+
+  it('rejects shares that leave no land', () => {
+    assert.throws(() =>
+      generateTerrain(20, 10, mulberry32(1), { waterShare: 0.6, rockShare: 0.5 }),
+    );
+    assert.throws(() => generateTerrain(20, 10, mulberry32(1), { waterShare: 1 }));
+  });
+
+  it('falls back to plain soil when the world is too small to shape', () => {
+    assert.deepEqual(generateTerrain(1, 1, mulberry32(7)), ['soil']);
+  });
+
+  it('bars water to everything and rock to predators only', () => {
+    assert.equal(isPassable('water', 'herbivore'), false);
+    assert.equal(isPassable('water', 'predator'), false);
+    assert.equal(isPassable('rock', 'herbivore'), true);
+    assert.equal(isPassable('rock', 'predator'), false);
+    assert.equal(isPassable('loam', 'predator'), true);
+  });
+
+  it('grows nothing on water or rock, and most on loam', () => {
+    assert.equal(fertility('water'), 0);
+    assert.equal(fertility('rock'), 0);
+    assert.ok(fertility('loam') > fertility('soil'));
+  });
+});
+
 describe('world', () => {
   function populatedWorld(seed: string) {
     const world = createWorld(32, 16, seed);
@@ -140,6 +205,50 @@ describe('world', () => {
     assert.ok(child);
   });
 
+  it('keeps every creature on ground its diet can walk', () => {
+    const world = createWorld(48, 20, 'walkable');
+    spawnCreature(world, genomeFromSha(SHA_A));
+    spawnCreature(world, genomeFromSha(SHA_B));
+    spawnCreature(world, genomeFromSha(PREDATOR_SHA));
+    for (let i = 0; i < 300; i++) {
+      stepWorld(world);
+      for (const c of aliveCreatures(world)) {
+        const ground = terrainAt(world, c.x, c.y);
+        assert.notEqual(ground, 'water', `${c.traits.diet} in the water at tick ${i}`);
+        if (c.traits.diet === 'predator') {
+          assert.notEqual(ground, 'rock', `predator on rock at tick ${i}`);
+        }
+      }
+    }
+  });
+
+  it('grows plants only where the ground is fertile', () => {
+    const world = createWorld(40, 16, 'fertile-ground');
+    spawnCreature(world, genomeFromSha(SHA_A));
+    for (let i = 0; i < 200; i++) {
+      stepWorld(world);
+    }
+    world.plants.forEach((growth, idx) => {
+      if (growth > 0) {
+        assert.ok(fertility(world.terrain[idx] ?? 'rock') > 0, `growth on ${world.terrain[idx]}`);
+      }
+    });
+  });
+
+  it('sends threatened prey onto rock the predator cannot climb', () => {
+    const world = createWorld(9, 9, 'refuge', { waterShare: 0, rockShare: 0 });
+    world.terrain.fill('soil');
+    // Refuge to the south, open ground to the east: cover should win even
+    // though running east puts the prey just as far from the hunter.
+    world.terrain[5 * 9 + 4] = 'rock';
+    const prey = spawnCreature(world, genomeFromSha(SHA_A), { x: 4, y: 4, energy: 200 });
+    const hunter = spawnCreature(world, genomeFromSha(PREDATOR_SHA), { x: 2, y: 4, energy: 50 });
+    assert.equal(prey.traits.diet, 'herbivore');
+    assert.equal(hunter.traits.diet, 'predator');
+    stepWorld(world);
+    assert.equal(terrainAt(world, prey.x, prey.y), 'rock');
+  });
+
   it('caps energy at MAX_ENERGY', () => {
     const world = createWorld(8, 8, 'feast');
     world.plants.fill(3);
@@ -157,6 +266,17 @@ describe('render', () => {
     const lines = frame.split('\n');
     assert.equal(lines.length, 5 + 3); // border + rows + border + status
     assert.match(lines.at(-1) ?? '', /tick 0 \| alive 1/);
+  });
+
+  it('draws water and rock beneath the living layer', () => {
+    const world = createWorld(6, 2, 'terrain-render', { waterShare: 0, rockShare: 0 });
+    world.terrain.fill('soil');
+    world.plants.fill(0);
+    world.terrain[0] = 'water';
+    world.terrain[1] = 'rock';
+    const firstRow = renderFrame(world).split('\n')[1] ?? '';
+    assert.match(firstRow, /~/);
+    assert.match(firstRow, /\^/);
   });
 });
 

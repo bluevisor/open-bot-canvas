@@ -2,9 +2,9 @@
 // and let the ecosystem run. Same history + same seed → the same world,
 // tick for tick.
 //
-//   pnpm world                    animate in the terminal
-//   pnpm world -- --snapshot      run silently, print the final frame (CI-safe)
-//   pnpm world -- --steps 800 --size 80x30 --seed anything
+//   pnpm world                 animate in the terminal
+//   pnpm world --snapshot      run silently, print the final frame (CI-safe)
+//   pnpm world --steps 800 --size 80x30 --seed anything
 
 import { genomeFromSha } from './genome.ts';
 import { readCommitHistory } from './history.ts';
