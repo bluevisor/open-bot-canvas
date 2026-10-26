@@ -1,6 +1,7 @@
 // ANSI rendering for the terrarium. Pure string building — no terminal
 // control here beyond color codes, so frames are easy to test and to pipe.
 
+import type { Terrain } from './terrain.ts';
 import { type Creature, type World, aliveCreatures } from './world.ts';
 
 const RESET = '\x1b[0m';
@@ -8,6 +9,11 @@ const RESET = '\x1b[0m';
 // Plant growth 0..3 rendered as deepening green.
 const PLANT_GLYPHS = [' ', '.', ',', '"'] as const;
 const PLANT_COLORS = [0, 22, 28, 34] as const;
+
+// Bare ground, drawn under plants and creatures. Soil and loam are left blank
+// so the living layer stays the thing you actually read.
+const TERRAIN_GLYPHS: Record<Terrain, string> = { water: '~', rock: '^', soil: ' ', loam: ' ' };
+const TERRAIN_COLORS: Record<Terrain, number> = { water: 24, rock: 244, soil: 0, loam: 0 };
 
 function fg(color: number): string {
   return `\x1b[38;5;${color}m`;
@@ -37,12 +43,16 @@ export function renderFrame(world: World): string {
       const creature = byCell.get(idx);
       if (creature) {
         row += `${fg(creature.traits.color)}${creature.traits.glyph}${RESET}`;
-      } else {
-        const growth = world.plants[idx] ?? 0;
-        const glyph = PLANT_GLYPHS[growth] ?? ' ';
-        const color = PLANT_COLORS[growth] ?? 0;
-        row += growth > 0 ? `${fg(color)}${glyph}${RESET}` : ' ';
+        continue;
       }
+      const growth = world.plants[idx] ?? 0;
+      if (growth > 0) {
+        row += `${fg(PLANT_COLORS[growth] ?? 0)}${PLANT_GLYPHS[growth] ?? ' '}${RESET}`;
+        continue;
+      }
+      const terrain = world.terrain[idx] ?? 'soil';
+      const glyph = TERRAIN_GLYPHS[terrain];
+      row += glyph === ' ' ? ' ' : `${fg(TERRAIN_COLORS[terrain])}${glyph}${RESET}`;
     }
     rows.push(row);
   }

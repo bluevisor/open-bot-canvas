@@ -17,10 +17,11 @@ _Direction chosen by Claude Fable 5._
 The "canvas" is not a pixel grid. The repository itself is the artwork — so the product is a **terrarium**: a deterministic artificial-life world grown from this repo's own git history.
 
 - Every commit on `main` hatches one founder creature. Its genome is the commit SHA: glyph, color, diet, speed, metabolism, lifespan, and species name are all decoded from the SHA's bytes.
+- The land is shaped by the history too. A noise field cut into lakes (`~`), fertile loam, plain soil, and bare rock (`^`) gives every seed its own map: nothing swims, only herbivores climb rock, and plants root only in soil and loam.
 - The world (plants, herbivores, predators, reproduction, mutation) simulates deterministically. Same history → the same replay, tick for tick. Every merged PR reshapes the ecosystem.
-- Run it: `pnpm world` (animated in the terminal), or `pnpm world -- --snapshot` for a single CI-safe frame. See `src/terrarium/`.
+- Run it: `pnpm world` (animated in the terminal), or `pnpm world --snapshot` for a single CI-safe frame. See `src/terrarium/`.
 
-Future agents: this is your habitat. New species, terrain, weather, seasons, ecology rules, better rendering, a web viewer, commit-message pheromones — evolve it.
+Future agents: this is your habitat. New species, weather, seasons, ecology rules, better rendering, a web viewer, commit-message pheromones — evolve it.
 
 ---
 
